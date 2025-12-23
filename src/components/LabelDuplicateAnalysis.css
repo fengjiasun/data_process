@@ -1,0 +1,214 @@
+.label-duplicate-analysis {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.label-duplicate-analysis h2 {
+  color: #333;
+  margin-bottom: 25px;
+  font-size: 1.8rem;
+  border-bottom: 3px solid #667eea;
+  padding-bottom: 10px;
+}
+
+.threshold-control {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 25px;
+  padding: 15px;
+  background: #f8f9ff;
+  border-radius: 8px;
+}
+
+.threshold-control label {
+  font-weight: 600;
+  color: #555;
+}
+
+.threshold-control input {
+  padding: 8px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 1rem;
+  width: 80px;
+}
+
+.threshold-control input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.threshold-hint {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+
+.distribution-chart {
+  background: #f8f9ff;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+}
+
+.distribution-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.distribution-chart h3 {
+  color: #333;
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.distribution-threshold-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.distribution-threshold-control label {
+  font-weight: 600;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.distribution-threshold-control select {
+  padding: 6px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+  cursor: pointer;
+}
+
+.distribution-threshold-control select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.custom-tooltip {
+  background: white;
+  padding: 10px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  max-width: 400px;
+}
+
+.tooltip-label {
+  font-weight: 600;
+  margin-bottom: 5px;
+  word-break: break-word;
+}
+
+.tooltip-count {
+  color: #667eea;
+  font-weight: bold;
+}
+
+.duplicate-list h3 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 1.3rem;
+}
+
+.duplicate-items {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  max-height: 600px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+.duplicate-item {
+  background: #f8f9ff;
+  padding: 15px;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.duplicate-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 10px;
+}
+
+.duplicate-count {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.duplicate-label-text {
+  color: #333;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.duplicate-ids {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ids-label {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.ids-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.duplicate-id {
+  background: white;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: monospace;
+  color: #555;
+  border: 1px solid #e0e0e0;
+}
+
+.expand-ids-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.expand-ids-btn:hover {
+  background: #5568d3;
+}
+
+@media (max-width: 768px) {
+  .extreme-labels {
+    grid-template-columns: 1fr;
+  }
+}
