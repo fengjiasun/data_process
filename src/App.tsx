@@ -1,27 +1,32 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Papa from 'papaparse'
 import FileUpload from './components/FileUpload'
 import DataVisualization from './components/DataVisualization'
 import DataFilter from './components/DataFilter'
 import LabelDuplicateAnalysis from './components/LabelDuplicateAnalysis'
 import FilteredResultsList from './components/FilteredResultsList'
-import { DataRow } from './types'
+import DataResampling from './components/DataResampling'
+import { DataRow, FilterCondition } from './types'
 import { getDataCount, batchReadData, filterData, exportAllData } from './utils/indexedDB'
+import { matchesWord } from './utils/textMatching'
 import './App.css'
 
 function App() {
   const [dataCount, setDataCount] = useState<number>(0)
   const [sampleData, setSampleData] = useState<DataRow[]>([]) // 只保存采样数据用于统计
   const [filteredData, setFilteredData] = useState<DataRow[]>([])
+  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([])
   const [fileType, setFileType] = useState<'csv' | 'tsv'>('csv')
   const [fileName, setFileName] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
+  const [originalColumns, setOriginalColumns] = useState<string[]>([])
 
-  const handleDataLoaded = async (count: number, type: 'csv' | 'tsv', name: string) => {
+  const handleDataLoaded = async (count: number, type: 'csv' | 'tsv', name: string, columns: string[]) => {
     setDataCount(count)
     setFileType(type)
     setFileName(name)
     setFilteredData([])
+    setOriginalColumns(columns)
     
     // 加载采样数据用于统计（最多10万条）
     setIsLoading(true)
@@ -45,21 +50,107 @@ function App() {
     return sampleData
   }
 
+  // 统计包含关键词的列值重复频率
+  const getTopKeywordResults = useMemo(() => {
+    if (filteredData.length === 0 || filterConditions.length === 0) {
+      return []
+    }
+
+    // 提取所有文本搜索条件中的"包含关键词"和对应的列
+    const textConditions = filterConditions.filter(
+      condition => condition.type === 'text' && condition.textSearch
+    )
+
+    if (textConditions.length === 0) {
+      return []
+    }
+
+    // 对每个文本搜索条件，统计包含该关键词的列值的重复次数
+    const results: Array<{
+      keyword: string
+      column: string
+      topValues: Array<{ value: string; count: number }>
+    }> = []
+
+    textConditions.forEach(condition => {
+      const keyword = condition.textSearch!.toLowerCase()
+      const column = condition.feature
+
+      // 收集所有包含该关键词的行的该列的值（使用单词匹配）
+      const columnValues: string[] = []
+      filteredData.forEach(row => {
+        const columnValue = row[column]
+        if (typeof columnValue === 'string' && columnValue) {
+          if (matchesWord(columnValue, condition.textSearch!)) {
+            columnValues.push(columnValue) // 保存原始值
+          }
+        }
+      })
+
+      if (columnValues.length === 0) {
+        return
+      }
+
+      // 统计每个值的重复次数
+      const valueCounts: Record<string, number> = {}
+      columnValues.forEach(value => {
+        valueCounts[value] = (valueCounts[value] || 0) + 1
+      })
+
+      // 转换为数组并按重复次数排序
+      const sortedValues = Object.entries(valueCounts)
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count)
+
+      // 检查是否有重复的值
+      const hasDuplicates = sortedValues.some(item => item.count > 1)
+
+      let topValues: Array<{ value: string; count: number }>
+      if (hasDuplicates) {
+        // 有重复的，取重复最多的前3个
+        topValues = sortedValues.slice(0, 3)
+      } else {
+        // 都是不重复的，随机取3个
+        const shuffled = [...sortedValues].sort(() => Math.random() - 0.5)
+        topValues = shuffled.slice(0, 3)
+      }
+
+      if (topValues.length > 0) {
+        results.push({
+          keyword: condition.textSearch!, // 使用原始关键词（保持大小写）
+          column,
+          topValues
+        })
+      }
+    })
+
+    return results
+  }, [filteredData, filterConditions])
+
   const handleExportCSV = async () => {
     if (filteredData.length === 0) {
       alert('没有可导出的数据')
       return
     }
 
-    // 获取所有列名
-    const columns = Object.keys(filteredData[0])
+    // 使用原始文件的列名，而不是筛选后数据的所有列
+    const columns = originalColumns.length > 0 ? originalColumns : Object.keys(filteredData[0])
     
     // 根据文件类型选择分隔符
     const delimiter = fileType === 'tsv' ? '\t' : ','
     const extension = fileType === 'tsv' ? 'tsv' : 'csv'
     
+    // 只导出原始列的数据
+    const dataToExport = filteredData.map(row => {
+      const exportRow: Record<string, any> = {}
+      columns.forEach(col => {
+        exportRow[col] = row[col] ?? ''
+      })
+      return exportRow
+    })
+    
     // 转换为CSV/TSV格式
-    const csv = Papa.unparse(filteredData, {
+    const csv = Papa.unparse(dataToExport, {
       columns: columns,
       header: true,
       delimiter: delimiter
@@ -130,7 +221,10 @@ function App() {
             <DataFilter 
               dataCount={dataCount}
               sampleData={sampleData}
-              onFilterChange={setFilteredData} 
+              onFilterChange={(data, conditions) => {
+                setFilteredData(data)
+                setFilterConditions(conditions)
+              }} 
               fileType={fileType} 
             />
             
@@ -140,6 +234,30 @@ function App() {
                 <div className="results-info">
                   <p>共找到 <strong>{filteredData.length}</strong> 条符合条件的数据</p>
                 </div>
+                {getTopKeywordResults.length > 0 && (
+                  <div className="keywords-frequency">
+                    <h3>📊 包含关键词的列值统计（前3名）</h3>
+                    {getTopKeywordResults.map((result, resultIndex) => (
+                      <div key={`${result.keyword}-${result.column}-${resultIndex}`} className="keyword-group">
+                        <div className="keyword-group-header">
+                          <span className="keyword-label">关键词: <strong>"{result.keyword}"</strong></span>
+                          <span className="keyword-column">列: <strong>{result.column}</strong></span>
+                        </div>
+                        <div className="keywords-list">
+                          {result.topValues.map((item, index) => (
+                            <div key={`${result.keyword}-${index}`} className="keyword-item">
+                              <span className="keyword-rank">#{index + 1}</span>
+                              <span className="keyword-text" title={item.value}>
+                                {item.value.length > 100 ? item.value.substring(0, 100) + '...' : item.value}
+                              </span>
+                              <span className="keyword-count">重复 {item.count} 次</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="results-actions">
                   <button 
                     className="export-csv-button"
@@ -160,6 +278,17 @@ function App() {
                 </div>
                 <FilteredResultsList data={filteredData} />
               </div>
+            )}
+            
+            {/* 数据重采样功能 - 放在页面最后，独立于筛选功能 */}
+            {sampleData.length > 0 && (
+              <DataResampling
+                data={sampleData}
+                dataCount={dataCount}
+                fileType={fileType}
+                originalColumns={originalColumns}
+                onNeedFullData={getFullData}
+              />
             )}
           </>
         )}

@@ -6,7 +6,7 @@ import { initDB, clearDB, batchWriteData } from '../utils/indexedDB'
 import './FileUpload.css'
 
 interface FileUploadProps {
-  onDataLoaded: (dataCount: number, fileType: 'csv' | 'tsv', fileName: string) => void
+  onDataLoaded: (dataCount: number, fileType: 'csv' | 'tsv', fileName: string, originalColumns: string[]) => void
 }
 
 // 计算文本的单词数
@@ -87,6 +87,7 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
       const CHUNK_SIZE = 10000 // 每处理10000行更新一次进度
       const startTime = Date.now()
       const fileSize = file.size
+      let originalColumns: string[] = []
 
       await new Promise<void>((resolve, reject) => {
         let isWriting = false
@@ -111,6 +112,15 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
           skipEmptyLines: true,
           delimiter: delimiter,
           step: (results) => {
+            // 在第一步时记录原始列名（从原始数据中获取，而不是处理后的数据）
+            if (rowCount === 0) {
+              if (results.meta?.fields && results.meta.fields.length > 0) {
+                originalColumns = results.meta.fields
+              } else {
+                // 如果 meta.fields 不可用，从原始数据的键中获取
+                originalColumns = Object.keys(results.data)
+              }
+            }
             const processedRow = processRow(results.data)
             if (processedRow) {
               batch.push(processedRow)
@@ -152,7 +162,7 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
               console.log(`处理完成: ${rowCount} 行，耗时 ${processingTime} 秒`)
               
               setTimeout(() => {
-                onDataLoaded(rowCount, isTSV ? 'tsv' : 'csv', file.name)
+                onDataLoaded(rowCount, isTSV ? 'tsv' : 'csv', file.name, originalColumns)
                 setIsProcessing(false)
                 setProgress(0)
               }, 100)

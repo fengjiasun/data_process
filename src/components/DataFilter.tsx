@@ -2,12 +2,13 @@ import { useState, useMemo } from 'react'
 import { Filter, X, Search } from 'lucide-react'
 import { DataRow, FilterCondition } from '../types'
 import { filterData } from '../utils/indexedDB'
+import { matchesWord } from '../utils/textMatching'
 import './DataFilter.css'
 
 interface DataFilterProps {
   dataCount: number
   sampleData: DataRow[]
-  onFilterChange: (filteredData: DataRow[]) => void
+  onFilterChange: (filteredData: DataRow[], conditions: FilterCondition[]) => void
   fileType: 'csv' | 'tsv'
 }
 
@@ -139,7 +140,7 @@ export default function DataFilter({ dataCount, sampleData, onFilterChange, file
 
   const handleApplyFilter = async () => {
     if (conditions.length === 0) {
-      onFilterChange([])
+      onFilterChange([], [])
       return
     }
 
@@ -156,12 +157,13 @@ export default function DataFilter({ dataCount, sampleData, onFilterChange, file
             // 支持任意文本列
             const textValue = row[condition.feature] as string | undefined
             if (!textValue || typeof textValue !== 'string') return false
-            const textLower = textValue.toLowerCase()
-            const searchLower = (condition.textSearch || '').toLowerCase()
-            const excludeLower = (condition.excludeTextSearch || '').toLowerCase()
             
-            const includesSearch = searchLower ? textLower.includes(searchLower) : true
-            const excludesExclude = excludeLower ? !textLower.includes(excludeLower) : true
+            const searchKeyword = condition.textSearch || ''
+            const excludeKeyword = condition.excludeTextSearch || ''
+            
+            // 使用单词匹配（忽略大小写）
+            const includesSearch = searchKeyword ? matchesWord(textValue, searchKeyword) : true
+            const excludesExclude = excludeKeyword ? !matchesWord(textValue, excludeKeyword) : true
             
             return includesSearch && excludesExclude
           }
@@ -174,7 +176,7 @@ export default function DataFilter({ dataCount, sampleData, onFilterChange, file
         }
       })
 
-      onFilterChange(filtered)
+      onFilterChange(filtered, conditions)
     } catch (error) {
       console.error('筛选数据失败:', error)
       alert('筛选数据时出错，请重试')
@@ -361,7 +363,7 @@ export default function DataFilter({ dataCount, sampleData, onFilterChange, file
                 className="clear-all-btn"
                 onClick={() => {
                   setConditions([])
-                  onFilterChange([])
+                  onFilterChange([], [])
                 }}
               >
                 清空所有条件
