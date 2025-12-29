@@ -12,33 +12,43 @@ interface LabelDuplicateAnalysisProps {
 }
 
 export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onNeedFullData }: LabelDuplicateAnalysisProps) {
-  const [threshold, setThreshold] = useState<number>(10)
-  const [distributionThreshold, setDistributionThreshold] = useState<number>(50)
+  const [threshold, setThreshold] = useState<number>(100)
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
-  // 自动识别文本列（用于重复分析）
-  const textColumnName = useMemo(() => {
-    if (data.length === 0) return null
+  // 自动识别所有文本列（用于重复分析）
+  const textColumns = useMemo(() => {
+    if (data.length === 0) return []
     
     const firstRow = data[0]
-    // 优先查找label或caption列
-    if (firstRow.label && typeof firstRow.label === 'string') return 'label'
-    if (firstRow.caption && typeof firstRow.caption === 'string') return 'caption'
+    const textCols: string[] = []
     
-    // 查找其他文本列（非数值、非id）
-    for (const key in firstRow) {
-      if (key !== 'id' && typeof firstRow[key] === 'string') {
-        return key
+    Object.keys(firstRow).forEach(key => {
+      if (key === 'id') return
+      const value = firstRow[key]
+      // 如果是字符串类型，认为是文本列
+      if (typeof value === 'string') {
+        textCols.push(key)
       }
-    }
+    })
     
-    return null
+    return textCols
   }, [data])
+  
+  // 默认选择第一个文本列（优先label）
+  const textColumnName = useMemo(() => {
+    if (textColumns.length === 0) return null
+    // 优先选择label列
+    if (textColumns.includes('label')) return 'label'
+    // 其次选择caption列
+    if (textColumns.includes('caption')) return 'caption'
+    // 否则选择第一个文本列
+    return textColumns[0]
+  }, [textColumns])
 
   // 统计文本列重复情况
   // 优化：对于大数据量，限制存储的ID数量，只存储前100个
-  const labelStats = useMemo(() => {
-    if (!textColumnName) return []
+  const labelStatsWithUniqueCount = useMemo(() => {
+    if (!textColumnName) return { stats: [], uniqueCount: 0 }
     
     const labelMap = new Map<string, { count: number; ids: string[] }>()
     const MAX_IDS_TO_STORE = 100 // 每个label最多存储100个ID
@@ -88,8 +98,19 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
       }))
       .sort((a, b) => b.count - a.count)
 
-    return statsArray
+    return {
+      stats: statsArray,
+      uniqueCount: labelMap.size // 唯一值的数量
+    }
   }, [data, textColumnName])
+  
+  const labelStats = useMemo(() => {
+    return labelStatsWithUniqueCount.stats
+  }, [labelStatsWithUniqueCount])
+  
+  const uniqueCount = useMemo(() => {
+    return labelStatsWithUniqueCount.uniqueCount
+  }, [labelStatsWithUniqueCount])
 
   // 过滤出超过阈值的label
   const filteredStats = useMemo(() => {
@@ -97,9 +118,9 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
   }, [labelStats, threshold])
 
 
-  // 准备分布数据（用于可视化）
+  // 准备分布数据（用于可视化，使用与显示阈值相同的阈值）
   const distributionData = useMemo(() => {
-    const overThreshold = filteredStats.filter(stat => stat.count > distributionThreshold)
+    const overThreshold = filteredStats.filter(stat => stat.count >= threshold)
     if (overThreshold.length === 0) return null
 
     return overThreshold.map(stat => ({
@@ -107,7 +128,7 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
       count: stat.count,
       fullLabel: stat.label
     }))
-  }, [filteredStats, distributionThreshold])
+  }, [filteredStats, threshold])
 
   if (filteredStats.length === 0 || !textColumnName) {
     return null
@@ -116,6 +137,17 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
   return (
     <div className="label-duplicate-analysis">
       <h2>{textColumnName}重复分析</h2>
+      
+      <div className="analysis-summary">
+        <div className="summary-item">
+          <span className="summary-label">唯一值数量:</span>
+          <span className="summary-value">{uniqueCount.toLocaleString()}</span>
+        </div>
+        <div className="summary-item">
+          <span className="summary-label">总数据量:</span>
+          <span className="summary-value">{(totalCount || data.length).toLocaleString()}</span>
+        </div>
+      </div>
       
       <div className="threshold-control">
         <label>显示阈值:</label>
@@ -131,17 +163,7 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
       {distributionData && distributionData.length > 0 && (
         <div className="distribution-chart">
           <div className="distribution-header">
-            <h3>重复次数超过{distributionThreshold}的{textColumnName}分布</h3>
-            <div className="distribution-threshold-control">
-              <label>分布图阈值:</label>
-              <select
-                value={distributionThreshold}
-                onChange={(e) => setDistributionThreshold(parseInt(e.target.value))}
-              >
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
+            <h3>重复次数 ≥ {threshold} 的{textColumnName}分布</h3>
           </div>
           <ResponsiveContainer width="100%" height={400}>
             <BarChart data={distributionData} margin={{ top: 20, right: 30, left: 20, bottom: 150 }}>

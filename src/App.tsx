@@ -210,7 +210,14 @@ function App() {
             </div>
             
             <DataVisualization data={sampleData} fileType={fileType} totalCount={dataCount} />
-            {sampleData.some(row => row.label || row.caption) && (
+            {sampleData.some(row => {
+              // 检查是否有任何文本列（非数值、非id的列）
+              return Object.keys(row).some(key => {
+                if (key === 'id') return false
+                const value = row[key]
+                return typeof value === 'string' && value.trim().length > 0
+              })
+            }) && (
               <LabelDuplicateAnalysis 
                 data={sampleData} 
                 fileType={fileType} 
