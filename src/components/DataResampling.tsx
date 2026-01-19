@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { RefreshCw, Download, X, Plus } from 'lucide-react'
 import Papa from 'papaparse'
 import { DataRow } from '../types'
 import { matchesWord } from '../utils/textMatching'
+import { filterData, countMatchingData } from '../utils/indexedDB'
 import './DataResampling.css'
 
 interface DataResamplingProps {
@@ -27,16 +28,6 @@ export default function DataResampling({ data, dataCount, fileType, originalColu
   const [conditions, setConditions] = useState<ResampleCondition[]>([])
   const [resampledData, setResampledData] = useState<DataRow[]>([])
   const [isResampling, setIsResampling] = useState(false)
-  
-  // 获取完整数据（用于重采样，确保与筛选功能使用相同的数据源）
-  const getFullDataForResampling = async (): Promise<DataRow[]> => {
-    if (dataCount <= 100000) {
-      // 数据量不大，直接使用传入的数据
-      return data
-    }
-    // 数据量大，从IndexedDB读取全部数据
-    return await onNeedFullData()
-  }
 
   // 自动检测可用的文本列（label或caption）
   const availableColumns = useMemo(() => {
@@ -83,11 +74,101 @@ export default function DataResampling({ data, dataCount, fileType, originalColu
     setResampledData([])
   }
 
-  // 统计某个关键词匹配的数据量（使用采样数据预览，实际重采样时使用完整数据）
+  // 统计某个关键词匹配的数据量（从IndexedDB查询完整数据，与筛选功能一致）
+  const [keywordCounts, setKeywordCounts] = useState<Record<string, number>>({})
+  const [isCounting, setIsCounting] = useState(false)
+  const [pendingQueries, setPendingQueries] = useState<Set<string>>(new Set())
+
+  // 异步获取关键词匹配数量（使用完整数据）
+  const getKeywordCountAsync = async (keyword: string, column: string): Promise<number> => {
+    if (!keyword.trim() || !column) return 0
+    
+    const cacheKey = `${column}:${keyword.toLowerCase()}`
+    
+    // 如果已有缓存，直接返回
+    if (keywordCounts[cacheKey] !== undefined) {
+      return keywordCounts[cacheKey]
+    }
+    
+    // 如果正在查询中，避免重复查询
+    if (pendingQueries.has(cacheKey)) {
+      // 等待现有查询完成
+      return new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (keywordCounts[cacheKey] !== undefined) {
+            clearInterval(checkInterval)
+            resolve(keywordCounts[cacheKey])
+          } else if (!pendingQueries.has(cacheKey)) {
+            clearInterval(checkInterval)
+            // 查询可能失败了，返回采样数据估算
+            const fallbackCount = data.filter(row => {
+              const value = row[column]
+              if (typeof value === 'string' && value) {
+                return matchesWord(value, keyword)
+              }
+              return false
+            }).length
+            resolve(fallbackCount)
+          }
+        }, 100)
+      })
+    }
+    
+    // 标记为正在查询
+    setPendingQueries(prev => new Set(prev).add(cacheKey))
+    setIsCounting(true)
+    
+    try {
+      // 使用优化的计数函数，只计数不收集数据，性能更好
+      const count = await countMatchingData((row) => {
+        const value = row[column]
+        if (typeof value === 'string' && value) {
+          return matchesWord(value, keyword)
+        }
+        return false
+      }, (processed, currentCount) => {
+        // 对于大数据量，每处理1万条更新一次计数（可选，用于显示进度）
+        if (processed % 10000 === 0) {
+          console.log(`统计 "${keyword}": 已处理 ${processed} 条，匹配 ${currentCount} 条...`)
+        }
+      })
+      
+      setKeywordCounts(prev => ({ ...prev, [cacheKey]: count }))
+      return count
+    } catch (error) {
+      console.error('统计关键词匹配数量失败:', error)
+      // 如果查询失败，回退到使用采样数据估算
+      const fallbackCount = data.filter(row => {
+        const value = row[column]
+        if (typeof value === 'string' && value) {
+          return matchesWord(value, keyword)
+        }
+        return false
+      }).length
+      setKeywordCounts(prev => ({ ...prev, [cacheKey]: fallbackCount }))
+      return fallbackCount
+    } finally {
+      setIsCounting(false)
+      setPendingQueries(prev => {
+        const next = new Set(prev)
+        next.delete(cacheKey)
+        return next
+      })
+    }
+  }
+
+  // 同步获取关键词匹配数量（用于显示，优先使用缓存）
+  // 注意：不会自动触发查询，查询由useEffect的防抖机制触发
   const getKeywordCount = (keyword: string, column: string): number => {
     if (!keyword.trim() || !column) return 0
     
-    // 使用采样数据快速预览，实际重采样时会使用完整数据
+    const cacheKey = `${column}:${keyword.toLowerCase()}`
+    if (keywordCounts[cacheKey] !== undefined) {
+      return keywordCounts[cacheKey]
+    }
+    
+    // 返回采样数据的估算值（临时显示，直到完整数据查询完成）
+    // 不在这里触发查询，避免输入时卡死
     return data.filter(row => {
       const value = row[column]
       if (typeof value === 'string' && value) {
@@ -97,7 +178,32 @@ export default function DataResampling({ data, dataCount, fileType, originalColu
     }).length
   }
 
-  // 执行重采样
+  // 当关键词或列改变时，异步查询完整数据的匹配数量（使用防抖）
+  const conditionKeys = useMemo(() => 
+    conditions.map(c => `${c.column}:${c.keyword}`).join(','), 
+    [conditions]
+  )
+  
+  useEffect(() => {
+    // 使用防抖，避免用户输入时频繁查询
+    // 增加防抖时间到1.5秒，给用户更多输入时间
+    const timeoutId = setTimeout(() => {
+      conditions.forEach(condition => {
+        if (condition.keyword.trim() && condition.column) {
+          const cacheKey = `${condition.column}:${condition.keyword.toLowerCase()}`
+          // 只在没有缓存且不在查询中时才查询
+          if (keywordCounts[cacheKey] === undefined && !pendingQueries.has(cacheKey)) {
+            getKeywordCountAsync(condition.keyword, condition.column).catch(() => {})
+          }
+        }
+      })
+    }, 1500) // 用户停止输入1.5秒后才查询，减少不必要的查询
+    
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conditionKeys])
+
+  // 执行重采样（使用IndexedDB游标，避免加载所有数据到内存）
   const handleResample = async () => {
     // 验证所有条件
     const validConditions = conditions.filter(c => 
@@ -121,42 +227,44 @@ export default function DataResampling({ data, dataCount, fileType, originalColu
     setIsResampling(true)
 
     try {
-      // 获取完整数据（与筛选功能使用相同的数据源）
-      const fullData = await getFullDataForResampling()
-      
-      // 按条件分组数据
+      // 使用IndexedDB游标遍历，按条件分组数据（避免加载所有数据到内存）
       const conditionGroups: Record<string, DataRow[]> = {}
       const allMatchedIds = new Set<string>()
 
-      validConditions.forEach(condition => {
-        const matchedRows: DataRow[] = []
-
-        fullData.forEach(row => {
+      // 为每个条件从IndexedDB筛选匹配的数据
+      for (const condition of validConditions) {
+        const matchedRows = await filterData((row) => {
           const value = row[condition.column]
           if (typeof value === 'string' && value) {
             // 使用单词匹配（与筛选功能一致）
             if (matchesWord(value, condition.keyword)) {
               // 避免重复添加（如果一条数据匹配多个条件，只添加到第一个匹配的条件）
               if (!allMatchedIds.has(row.id)) {
-                matchedRows.push(row)
                 allMatchedIds.add(row.id)
+                return true
               }
             }
+          }
+          return false
+        }, (processed) => {
+          // 更新进度
+          if (processed % 10000 === 0) {
+            console.log(`正在筛选 "${condition.keyword}": 已处理 ${processed} 条数据...`)
           }
         })
 
         conditionGroups[condition.id] = matchedRows
-      })
+      }
 
       const resampled: DataRow[] = []
 
       // 对每个条件进行重采样
-      validConditions.forEach(condition => {
+      for (const condition of validConditions) {
         const rows = conditionGroups[condition.id] || []
         const maxCountNum = parseInt(condition.maxCount)
 
         if (rows.length === 0) {
-          return // 没有匹配的数据
+          continue // 没有匹配的数据
         }
 
         if (rows.length > maxCountNum) {
@@ -176,14 +284,19 @@ export default function DataResampling({ data, dataCount, fileType, originalColu
           // 正好等于数量
           resampled.push(...rows)
         }
-      })
+      }
 
       // 添加未被重采样操作涉及到的数据（保留原始数据）
-      fullData.forEach(row => {
-        if (!allMatchedIds.has(row.id)) {
-          resampled.push(row)
+      // 使用IndexedDB游标遍历，只添加未匹配的数据
+      const unmatchedData = await filterData((row) => {
+        return !allMatchedIds.has(row.id)
+      }, (processed) => {
+        // 更新进度
+        if (processed % 10000 === 0) {
+          console.log(`正在添加未匹配数据: 已处理 ${processed} 条数据...`)
         }
       })
+      resampled.push(...unmatchedData)
 
       // 打乱最终结果
       const shuffled = resampled.sort(() => Math.random() - 0.5)
@@ -294,7 +407,10 @@ export default function DataResampling({ data, dataCount, fileType, originalColu
                       />
                       {condition.keyword && (
                         <span className="match-count">
-                          匹配 {matchCount} 条数据
+                          {isCounting ? '正在统计...' : `匹配 ${matchCount.toLocaleString()} 条数据`}
+                          {keywordCounts[`${condition.column}:${condition.keyword.toLowerCase()}`] === undefined && !isCounting && matchCount > 0 && (
+                            <span style={{ fontSize: '0.85em', color: '#888', marginLeft: '4px' }}>(估算中...)</span>
+                          )}
                         </span>
                       )}
                     </div>

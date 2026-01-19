@@ -41,13 +41,31 @@ function App() {
     }
   }
 
-  // 获取完整数据（用于需要全部数据的场景）
+  // 获取完整数据（用于需要全部数据的场景，如重采样）
   const getFullData = async (): Promise<DataRow[]> => {
+    // 始终从IndexedDB读取完整数据，确保与筛选功能使用相同的数据源
+    // 对于大数据量，分批读取所有数据
     if (dataCount <= 100000) {
       return await batchReadData(0, dataCount)
     }
-    // 对于大数据量，返回采样数据
-    return sampleData
+    
+    // 对于大数据量，分批读取所有数据
+    const allData: DataRow[] = []
+    const batchSize = 100000
+    let offset = 0
+    
+    while (offset < dataCount) {
+      const batch = await batchReadData(offset, batchSize)
+      allData.push(...batch)
+      offset += batch.length
+      
+      // 如果读取的数据少于批次大小，说明已经读取完毕
+      if (batch.length < batchSize) {
+        break
+      }
+    }
+    
+    return allData
   }
 
   // 统计包含关键词的列值重复频率

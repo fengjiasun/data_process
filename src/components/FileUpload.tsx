@@ -39,20 +39,16 @@ const processRow = (row: any): DataRow | null => {
       // 是有效数字，存储为数字类型
       processedRow[key] = numValue
     } else {
-      // 是文本，存储为字符串
-      const stringValue = String(value).trim()
-      if (stringValue) {
-        processedRow[key] = stringValue
-        
-        // 如果是label或caption列，计算单词数
-        if (key.toLowerCase() === 'label' || key.toLowerCase() === 'caption') {
-          // 为了兼容，也设置label字段
-          if (key.toLowerCase() === 'caption') {
-            processedRow.label = stringValue
+        // 是文本，存储为字符串
+        const stringValue = String(value).trim()
+        if (stringValue) {
+          processedRow[key] = stringValue
+          
+          // 如果是label或caption列，计算单词数（不自动添加label字段）
+          if (key.toLowerCase() === 'label' || key.toLowerCase() === 'caption') {
+            processedRow.label_word_count = countWords(stringValue)
           }
-          processedRow.label_word_count = countWords(stringValue)
         }
-      }
     }
   })
 

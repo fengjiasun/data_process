@@ -134,8 +134,8 @@ export default function DataVisualization({ data, fileType, totalCount }: DataVi
     if (textColumns.length === 0) return []
     
     return textColumns.map(columnName => {
-      // 检查是否有数据
-      if (!data.some(row => {
+      // 检查是否有数据（基于采样数据）
+      if (!sampleData.some(row => {
         const textValue = row[columnName]
         return textValue !== undefined && textValue !== null && typeof textValue === 'string' && textValue.trim().length > 0
       })) {
@@ -180,17 +180,17 @@ export default function DataVisualization({ data, fileType, totalCount }: DataVi
         }
       })
 
-      // 计算实际有文本的数据量
-      const actualCount = data.filter(row => {
+      // 计算实际有文本的数据量（基于采样数据）
+      const actualCount = sampleData.filter(row => {
         const textValue = row[columnName] as string | undefined
         return textValue !== undefined && textValue !== null && typeof textValue === 'string' && textValue.trim().length > 0
       }).length
 
-      // 找出词数最长和最短的文本
+      // 找出词数最长和最短的文本（只从采样数据中查找）
       let longest: { label: string; wordCount: number; id: string } | null = null
       let shortest: { label: string; wordCount: number; id: string } | null = null
 
-      data.forEach(row => {
+      sampleData.forEach(row => {
         const textValue = row[columnName] as string | undefined
         if (textValue && typeof textValue === 'string') {
           const label = textValue.trim()

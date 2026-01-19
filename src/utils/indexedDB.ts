@@ -206,5 +206,54 @@ export const exportAllData = async (): Promise<DataRow[]> => {
   })
 }
 
+// 只计数匹配的数据（不收集数据，性能更好，使用分批处理避免阻塞）
+export const countMatchingData = async (
+  filterFn: (row: DataRow) => boolean,
+  onProgress?: (processed: number, count: number) => void
+): Promise<number> => {
+  const database = await initDB()
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([STORE_NAME], 'readonly')
+    const store = transaction.objectStore(STORE_NAME)
+    const request = store.openCursor()
+    let count = 0
+    let processed = 0
+    let batchCount = 0
+    const BATCH_SIZE = 5000 // 每处理5000条后让出控制权，避免阻塞UI
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
+      if (!cursor) {
+        resolve(count)
+        return
+      }
+
+      const row = cursor.value
+      if (filterFn(row)) {
+        count++
+      }
+      processed++
+      batchCount++
+
+      // 更新进度
+      if (onProgress && processed % 10000 === 0) {
+        onProgress(processed, count)
+      }
+
+      // 如果批次完成，让出控制权给主线程
+      if (batchCount >= BATCH_SIZE) {
+        batchCount = 0
+        setTimeout(() => {
+          cursor.continue()
+        }, 0)
+      } else {
+        cursor.continue()
+      }
+    }
+
+    request.onerror = () => reject(request.error)
+  })
+}
+
 
 

@@ -46,18 +46,22 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
   }, [textColumns])
 
   // 统计文本列重复情况
-  // 优化：对于大数据量，限制存储的ID数量，只存储前100个
+  // 使用采样数据进行统计（避免大数据量卡死）
+  // 注意：这是基于采样数据的统计，可能与全量数据的精确统计有差异
   const labelStatsWithUniqueCount = useMemo(() => {
     if (!textColumnName) return { stats: [], uniqueCount: 0 }
+    
+    // 使用传入的采样数据进行统计
+    const dataToUse = data
     
     const labelMap = new Map<string, { count: number; ids: string[] }>()
     const MAX_IDS_TO_STORE = 100 // 每个label最多存储100个ID
     
     // 使用分批处理避免阻塞
     const processBatch = (startIndex: number, batchSize: number = 10000) => {
-      const endIndex = Math.min(startIndex + batchSize, data.length)
+      const endIndex = Math.min(startIndex + batchSize, dataToUse.length)
       for (let i = startIndex; i < endIndex; i++) {
-        const row = data[i]
+        const row = dataToUse[i]
         const textValue = row[textColumnName] as string | undefined
         if (textValue && typeof textValue === 'string') {
           const label = textValue.trim()
@@ -77,15 +81,15 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
     }
 
     // 对于大数据量，分批处理
-    if (data.length > 50000) {
+    if (dataToUse.length > 50000) {
       let currentIndex = 0
       const batchSize = 10000
-      while (currentIndex < data.length) {
+      while (currentIndex < dataToUse.length) {
         processBatch(currentIndex, batchSize)
         currentIndex += batchSize
       }
     } else {
-      processBatch(0, data.length)
+      processBatch(0, dataToUse.length)
     }
 
     // 转换为数组并按数量排序
@@ -131,7 +135,34 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
   }, [filteredStats, threshold])
 
   if (filteredStats.length === 0 || !textColumnName) {
-    return null
+    return (
+      <div className="label-duplicate-analysis">
+        <h2>{textColumnName}重复分析</h2>
+        <div className="analysis-summary">
+          <div className="summary-item">
+            <span className="summary-label">唯一值数量:</span>
+            <span className="summary-value">{uniqueCount.toLocaleString()}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">总数据量:</span>
+            <span className="summary-value">{(totalCount || data.length).toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="threshold-control">
+          <label>显示阈值:</label>
+          <input
+            type="number"
+            value={threshold}
+            onChange={(e) => setThreshold(Math.max(1, parseInt(e.target.value) || 1))}
+            min="1"
+          />
+          <span className="threshold-hint">只显示重复次数 ≥ {threshold} 的{textColumnName}</span>
+        </div>
+        <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+          <p>没有找到重复次数 ≥ {threshold} 的{textColumnName}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -140,13 +171,20 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
       
       <div className="analysis-summary">
         <div className="summary-item">
-          <span className="summary-label">唯一值数量:</span>
+          <span className="summary-label">唯一值数量（基于采样数据）:</span>
           <span className="summary-value">{uniqueCount.toLocaleString()}</span>
         </div>
         <div className="summary-item">
           <span className="summary-label">总数据量:</span>
           <span className="summary-value">{(totalCount || data.length).toLocaleString()}</span>
         </div>
+        {totalCount && totalCount > data.length && (
+          <div className="summary-item">
+            <span className="summary-label" style={{ fontSize: '0.9rem', color: '#888' }}>
+              （基于 {data.length.toLocaleString()} 条采样数据统计）
+            </span>
+          </div>
+        )}
       </div>
       
       <div className="threshold-control">
