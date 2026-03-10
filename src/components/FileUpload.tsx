@@ -9,46 +9,26 @@ interface FileUploadProps {
   onDataLoaded: (dataCount: number, fileType: 'csv' | 'tsv', fileName: string, originalColumns: string[]) => void
 }
 
-// 计算文本的单词数
-const countWords = (text: string): number => {
-  if (!text || typeof text !== 'string') return 0
-  // 移除多余空格，按空格和标点符号分割
-  const words = text.trim().split(/\s+/).filter(word => word.length > 0)
-  return words.length
-}
+// 处理单行数据 - 自适应：第一列为 id/文件名，其余列为指标或文本
+// firstColumnName: 表头第一列名（用作 id，兼容无 "id" 列的各种 CSV）
+const processRow = (row: any, firstColumnName?: string): DataRow | null => {
+  const idValue = row.id ?? (firstColumnName ? row[firstColumnName] : null) ?? ''
+  const id = String(idValue).trim()
+  if (!id) return null
 
-// 处理单行数据 - 自适应识别所有列
-const processRow = (row: any): DataRow | null => {
-  const processedRow: DataRow = { id: row.id || '' }
-  if (!processedRow.id) return null
-  
-  // 遍历所有列，自动识别类型
-  Object.keys(row).forEach(key => {
-    if (key === 'id') return // id已经处理过了
-    
+  const processedRow: DataRow = { id }
+
+  const keys = Object.keys(row)
+  keys.forEach(key => {
     const value = row[key]
-    
-    // 跳过空值
-    if (value === undefined || value === null || value === '') {
-      return
-    }
-    
-    // 尝试转换为数字
+    if (value === undefined || value === null || value === '') return
+
     const numValue = parseFloat(value)
     if (!isNaN(numValue) && isFinite(numValue)) {
-      // 是有效数字，存储为数字类型
       processedRow[key] = numValue
     } else {
-        // 是文本，存储为字符串
-        const stringValue = String(value).trim()
-        if (stringValue) {
-          processedRow[key] = stringValue
-          
-          // 如果是label或caption列，计算单词数（不自动添加label字段）
-          if (key.toLowerCase() === 'label' || key.toLowerCase() === 'caption') {
-            processedRow.label_word_count = countWords(stringValue)
-          }
-        }
+      const stringValue = String(value).trim()
+      if (stringValue) processedRow[key] = stringValue
     }
   })
 
@@ -75,7 +55,8 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
 
       const fileName = file.name.toLowerCase()
       const isTSV = fileName.endsWith('.tsv')
-      const delimiter = isTSV ? '\t' : ','
+      // .txt 不写死分隔符，交给 Papa 自动检测（逗号或制表符）
+      const delimiter = isTSV ? '\t' : (fileName.endsWith('.txt') ? '' : ',')
 
       const batch: DataRow[] = []
       let rowCount = 0
@@ -108,16 +89,15 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
           skipEmptyLines: true,
           delimiter: delimiter,
           step: (results) => {
-            // 在第一步时记录原始列名（从原始数据中获取，而不是处理后的数据）
             if (rowCount === 0) {
               if (results.meta?.fields && results.meta.fields.length > 0) {
                 originalColumns = results.meta.fields
               } else {
-                // 如果 meta.fields 不可用，从原始数据的键中获取
                 originalColumns = Object.keys(results.data)
               }
             }
-            const processedRow = processRow(results.data)
+            const firstCol = originalColumns[0] ?? Object.keys(results.data)[0]
+            const processedRow = processRow(results.data, firstCol)
             if (processedRow) {
               batch.push(processedRow)
               
@@ -204,14 +184,14 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
         ) : (
           <>
             <p>点击或拖拽文件到此处上传</p>
-            <p className="upload-hint">支持 .csv 和 .tsv 格式文件（支持大数据量）</p>
+            <p className="upload-hint">支持 .csv、.tsv、.txt（表头+逗号/制表符分隔，首列为 ID）</p>
           </>
         )}
       </div>
       <input
         ref={fileInputRef}
         type="file"
-        accept=".csv,.tsv"
+        accept=".csv,.tsv,.txt"
         onChange={handleFileChange}
         disabled={isProcessing}
         style={{ display: 'none' }}

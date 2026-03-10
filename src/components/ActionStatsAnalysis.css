@@ -1,0 +1,204 @@
+.action-stats-analysis {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+}
+
+.action-stats-analysis h2 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 2px solid #667eea;
+  padding-bottom: 8px;
+}
+
+.action-stats-upload {
+  margin-bottom: 24px;
+}
+
+.action-stats-upload-btn {
+  display: inline-block;
+  padding: 10px 20px;
+  background: #667eea;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.action-stats-upload-btn:hover {
+  background: #5568d3;
+}
+
+.action-stats-hint,
+.action-stats-error {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.action-stats-error {
+  color: #c00;
+}
+
+.action-stats-summary {
+  margin-bottom: 24px;
+}
+
+.action-stats-summary h3,
+.action-stats-filters h3,
+.action-stats-top h3,
+.action-stats-chart h3 {
+  font-size: 1.1rem;
+  color: #444;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-stats-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.action-stats-summary-item {
+  padding: 14px 20px;
+  background: #f0f4ff;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.action-stats-summary-item .label {
+  display: block;
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.action-stats-summary-item .value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.action-stats-pct {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #666;
+  margin-left: 4px;
+}
+
+.action-stats-filters {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f8f9ff;
+  border-radius: 8px;
+}
+
+.action-stats-filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.action-stats-filters .filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-stats-filters .filter-group label {
+  font-weight: 600;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.action-stats-filters .filter-group input {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.action-stats-filters .axis-group .axis-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-stats-filters .axis-group .axis-inputs input {
+  flex: 1;
+  min-width: 0;
+}
+
+.action-stats-top {
+  margin-bottom: 24px;
+}
+
+.action-stats-top-hint {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.action-stats-table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #eee;
+}
+
+.action-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.action-stats-table th,
+.action-stats-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.action-stats-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+  color: #444;
+}
+
+.action-stats-table tbody tr:hover {
+  background: #f9f9ff;
+}
+
+.action-stats-table td:nth-child(2) {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-stats-chart {
+  padding: 16px 0;
+}
+
+.action-stats-tooltip {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 400px;
+  word-break: break-all;
+}
+
+.action-stats-tooltip div + div {
+  margin-top: 4px;
+}

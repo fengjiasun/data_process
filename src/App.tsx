@@ -6,6 +6,7 @@ import DataFilter from './components/DataFilter'
 import LabelDuplicateAnalysis from './components/LabelDuplicateAnalysis'
 import FilteredResultsList from './components/FilteredResultsList'
 import DataResampling from './components/DataResampling'
+import ActionStatsAnalysis from './components/ActionStatsAnalysis'
 import { DataRow, FilterCondition } from './types'
 import { getDataCount, batchReadData, filterData, exportAllData } from './utils/indexedDB'
 import { matchesWord } from './utils/textMatching'
@@ -195,10 +196,11 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>数据分析和可视化平台</h1>
-        <p>上传CSV/TSV文件，分析数据分布，筛选指定特征的数据</p>
+        <p>上传CSV/TSV文件分析数据分布，或上传 Action 统计 JSON 分析动作类别</p>
       </header>
 
       <main className="app-main">
+        <ActionStatsAnalysis />
         <FileUpload onDataLoaded={handleDataLoaded} />
 
         {isLoading && (

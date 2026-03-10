@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { DataRow } from '../types'
@@ -34,16 +34,27 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
     return textCols
   }, [data])
   
-  // 默认选择第一个文本列（优先label）
-  const textColumnName = useMemo(() => {
+  // 默认文本列：优先选择列名中包含 label 或 caption 的列，否则取第一个文本列
+  const defaultColumnName = useMemo(() => {
     if (textColumns.length === 0) return null
-    // 优先选择label列
-    if (textColumns.includes('label')) return 'label'
-    // 其次选择caption列
-    if (textColumns.includes('caption')) return 'caption'
-    // 否则选择第一个文本列
+    const lower = (s: string) => s.toLowerCase()
+    const withLabel = textColumns.find(col => lower(col).includes('label'))
+    if (withLabel) return withLabel
+    const withCaption = textColumns.find(col => lower(col).includes('caption'))
+    if (withCaption) return withCaption
     return textColumns[0]
   }, [textColumns])
+
+  // 用户选择的要分析重复的列（可手动切换）
+  const [selectedColumn, setSelectedColumn] = useState<string | null>(null)
+  useEffect(() => {
+    if (!defaultColumnName) return
+    setSelectedColumn(prev => {
+      if (!prev || !textColumns.includes(prev)) return defaultColumnName
+      return prev
+    })
+  }, [defaultColumnName, textColumns.join(',')])
+  const textColumnName = selectedColumn ?? defaultColumnName
 
   // 统计文本列重复情况
   // 使用采样数据进行统计（避免大数据量卡死）
@@ -148,6 +159,20 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
             <span className="summary-value">{(totalCount || data.length).toLocaleString()}</span>
           </div>
         </div>
+        {textColumns.length > 0 && (
+          <div className="column-selector">
+            <label htmlFor="duplicate-analysis-column">选择要分析重复的列:</label>
+            <select
+              id="duplicate-analysis-column"
+              value={textColumnName}
+              onChange={(e) => setSelectedColumn(e.target.value)}
+            >
+              {textColumns.map(col => (
+                <option key={col} value={col}>{col}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="threshold-control">
           <label>显示阈值:</label>
           <input
@@ -187,6 +212,20 @@ export default function LabelDuplicateAnalysis({ data, fileType, totalCount, onN
         )}
       </div>
       
+      {textColumns.length > 0 && (
+        <div className="column-selector">
+          <label htmlFor="duplicate-analysis-column">选择要分析重复的列:</label>
+          <select
+            id="duplicate-analysis-column"
+            value={textColumnName}
+            onChange={(e) => setSelectedColumn(e.target.value)}
+          >
+            {textColumns.map(col => (
+              <option key={col} value={col}>{col}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="threshold-control">
         <label>显示阈值:</label>
         <input

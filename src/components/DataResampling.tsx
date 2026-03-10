@@ -22,27 +22,21 @@ interface ResampleCondition {
 }
 
 export default function DataResampling({ data, dataCount, fileType, originalColumns, onNeedFullData }: DataResamplingProps) {
-  // 只在TSV文件时显示
-  if (fileType !== 'tsv') return null
+  // CSV/TSV 均支持重采样
 
   const [conditions, setConditions] = useState<ResampleCondition[]>([])
   const [resampledData, setResampledData] = useState<DataRow[]>([])
   const [isResampling, setIsResampling] = useState(false)
 
-  // 自动检测可用的文本列（label或caption）
+  // 自适应：所有字符串类型的列都作为可搜索列（不写死列名）
   const availableColumns = useMemo(() => {
     if (data.length === 0) return []
-    
-    const columns: string[] = []
     const firstRow = data[0]
-    
-    if (firstRow.label && typeof firstRow.label === 'string') {
-      columns.push('label')
-    }
-    if (firstRow.caption && typeof firstRow.caption === 'string') {
-      columns.push('caption')
-    }
-    
+    const columns: string[] = []
+    Object.keys(firstRow).forEach(key => {
+      if (key === 'id') return
+      if (typeof firstRow[key] === 'string') columns.push(key)
+    })
     return columns
   }, [data])
 
