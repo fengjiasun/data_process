@@ -6,11 +6,11 @@ import './ActionStatsAnalysis.css'
 const TOP_N_DEFAULT = 10
 const TOP_N_FILTERED = 5
 
-/** 解析 action 键 "axis:0.0,-1.0,0.0,0.0|buttons:-1" */
-function parseActionKey(key: string): { axis: number[]; buttons: number } | null {
+/** 解析 action 键 "axis:0.0,-1.0,0.0,0.0|buttons:-1" 或 "buttons:1,2,3,4" */
+function parseActionKey(key: string): { axis: number[]; buttons: number | number[] } | null {
   const parts = key.split('|')
   let axis: number[] = []
-  let buttons = -1
+  let buttons: number | number[] = -1
   for (const p of parts) {
     const t = p.trim()
     if (t.startsWith('axis:')) {
@@ -18,8 +18,14 @@ function parseActionKey(key: string): { axis: number[]; buttons: number } | null
       axis = s.split(',').map((x) => parseFloat(x.trim()))
       if (axis.length !== 4 || axis.some((n) => isNaN(n))) return null
     } else if (t.startsWith('buttons:')) {
-      buttons = parseFloat(t.slice(8).trim())
-      if (isNaN(buttons)) return null
+      const rest = t.slice(8).trim()
+      if (rest.includes(',')) {
+        const arr = rest.split(',').map((x) => parseFloat(x.trim())).filter((n) => !isNaN(n))
+        buttons = arr.length > 0 ? (arr.length === 1 ? arr[0] : arr) : -1
+      } else {
+        const n = parseFloat(rest)
+        buttons = isNaN(n) ? -1 : n
+      }
     }
   }
   return axis.length === 4 ? { axis, buttons } : null
@@ -35,7 +41,7 @@ interface ParsedAction {
   key: string
   frames: number
   axis: number[]
-  buttons: number
+  buttons: number | number[]
 }
 
 export default function ActionStatsAnalysis() {
@@ -45,7 +51,8 @@ export default function ActionStatsAnalysis() {
   const [loading, setLoading] = useState(false)
 
   // 筛选条件
-  const [buttonsFilter, setButtonsFilter] = useState<string>('') // 空表示不筛
+  const [buttonsFilter, setButtonsFilter] = useState<string>('') // 精确匹配（单个按键值）
+  const [buttonsComboFilter, setButtonsComboFilter] = useState<string>('') // 按键组合（包含这些键）
   const [axis0Min, setAxis0Min] = useState<string>('')
   const [axis0Max, setAxis0Max] = useState<string>('')
   const [axis1Min, setAxis1Min] = useState<string>('')
@@ -54,6 +61,10 @@ export default function ActionStatsAnalysis() {
   const [axis2Max, setAxis2Max] = useState<string>('')
   const [axis3Min, setAxis3Min] = useState<string>('')
   const [axis3Max, setAxis3Max] = useState<string>('')
+  const [axis0NotZero, setAxis0NotZero] = useState(false)
+  const [axis1NotZero, setAxis1NotZero] = useState(false)
+  const [axis2NotZero, setAxis2NotZero] = useState(false)
+  const [axis3NotZero, setAxis3NotZero] = useState(false)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -102,10 +113,29 @@ export default function ActionStatsAnalysis() {
   const filteredList = useMemo(() => {
     let list = parsedList
 
+    const EPS = 1e-9
+    const buttonsContains = (v: number | number[], target: number): boolean => {
+      if (Array.isArray(v)) return v.includes(target)
+      return v === target
+    }
+
+    // 精确筛选：buttons 值中需要包含该数字
     const b = buttonsFilter.trim()
     if (b !== '') {
       const n = parseFloat(b)
-      if (!isNaN(n)) list = list.filter((x) => x.buttons === n)
+      if (!isNaN(n)) list = list.filter((x) => buttonsContains(x.buttons, n))
+    }
+
+    // 按键组合筛选：buttons 值中需要同时包含所有指定的键
+    const combo = buttonsComboFilter.trim()
+    if (combo !== '') {
+      const keys = combo
+        .split(/[,，\s]+/)
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !isNaN(n) && n >= 1 && n <= 17)
+      if (keys.length > 0) {
+        list = list.filter((x) => keys.every((k) => buttonsContains(x.buttons, k)))
+      }
     }
 
     const inRange = (v: number, minS: string, maxS: string): boolean => {
@@ -117,17 +147,21 @@ export default function ActionStatsAnalysis() {
       return true
     }
 
+    const notZeroFlags = [axis0NotZero, axis1NotZero, axis2NotZero, axis3NotZero]
+
     list = list.filter(
       (x) =>
         inRange(x.axis[0], axis0Min, axis0Max) &&
         inRange(x.axis[1], axis1Min, axis1Max) &&
         inRange(x.axis[2], axis2Min, axis2Max) &&
-        inRange(x.axis[3], axis3Min, axis3Max)
+        inRange(x.axis[3], axis3Min, axis3Max) &&
+        notZeroFlags.every((flag, i) => !flag || Math.abs(x.axis[i]) > EPS)
     )
     return list
   }, [
     parsedList,
     buttonsFilter,
+    buttonsComboFilter,
     axis0Min,
     axis0Max,
     axis1Min,
@@ -136,11 +170,17 @@ export default function ActionStatsAnalysis() {
     axis2Max,
     axis3Min,
     axis3Max,
+    axis0NotZero,
+    axis1NotZero,
+    axis2NotZero,
+    axis3NotZero,
   ])
 
   const hasFilter =
     buttonsFilter.trim() !== '' ||
-    [axis0Min, axis0Max, axis1Min, axis1Max, axis2Min, axis2Max, axis3Min, axis3Max].some((s) => s.trim() !== '')
+    buttonsComboFilter.trim() !== '' ||
+    [axis0Min, axis0Max, axis1Min, axis1Max, axis2Min, axis2Max, axis3Min, axis3Max].some((s) => s.trim() !== '') ||
+    axis0NotZero || axis1NotZero || axis2NotZero || axis3NotZero
 
   const filteredTotalFrames = useMemo(() => filteredList.reduce((s, x) => s + x.frames, 0), [filteredList])
   const topN = hasFilter ? TOP_N_FILTERED : TOP_N_DEFAULT
@@ -230,46 +270,69 @@ export default function ActionStatsAnalysis() {
             </h3>
             <div className="action-stats-filters-grid">
               <div className="filter-group">
-                <label>buttons（精确）</label>
+                <label>buttons（包含该键）</label>
                 <input
                   type="text"
-                  placeholder="如 1 或 -1，空=不筛"
+                  placeholder="如 3 或 -1，空=不筛"
                   value={buttonsFilter}
                   onChange={(e) => setButtonsFilter(e.target.value)}
                 />
+                <span className="filter-hint">buttons 值中需包含此数字</span>
               </div>
-              {([0, 1, 2, 3] as const).map((i) => (
-                <div key={i} className="filter-group axis-group">
-                  <label>axis[{i}] 范围</label>
-                  <div className="axis-inputs">
-                    <input
-                      type="text"
-                      placeholder="最小"
-                      value={i === 0 ? axis0Min : i === 1 ? axis1Min : i === 2 ? axis2Min : axis3Min}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (i === 0) setAxis0Min(v)
-                        else if (i === 1) setAxis1Min(v)
-                        else if (i === 2) setAxis2Min(v)
-                        else setAxis3Min(v)
-                      }}
-                    />
-                    <span>～</span>
-                    <input
-                      type="text"
-                      placeholder="最大"
-                      value={i === 0 ? axis0Max : i === 1 ? axis1Max : i === 2 ? axis2Max : axis3Max}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (i === 0) setAxis0Max(v)
-                        else if (i === 1) setAxis1Max(v)
-                        else if (i === 2) setAxis2Max(v)
-                        else setAxis3Max(v)
-                      }}
-                    />
+              <div className="filter-group">
+                <label>按键组合（需同时包含）</label>
+                <input
+                  type="text"
+                  placeholder="如 1,2,3,4（键1-17）"
+                  value={buttonsComboFilter}
+                  onChange={(e) => setButtonsComboFilter(e.target.value)}
+                />
+                <span className="filter-hint">buttons 值需同时包含所有指定键</span>
+              </div>
+              {([0, 1, 2, 3] as const).map((i) => {
+                const notZero = [axis0NotZero, axis1NotZero, axis2NotZero, axis3NotZero][i]
+                const setNotZero = [setAxis0NotZero, setAxis1NotZero, setAxis2NotZero, setAxis3NotZero][i]
+                return (
+                  <div key={i} className="filter-group axis-group">
+                    <label>axis[{i}] 范围</label>
+                    <div className="axis-inputs">
+                      <input
+                        type="text"
+                        placeholder="最小"
+                        value={i === 0 ? axis0Min : i === 1 ? axis1Min : i === 2 ? axis2Min : axis3Min}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (i === 0) setAxis0Min(v)
+                          else if (i === 1) setAxis1Min(v)
+                          else if (i === 2) setAxis2Min(v)
+                          else setAxis3Min(v)
+                        }}
+                      />
+                      <span>～</span>
+                      <input
+                        type="text"
+                        placeholder="最大"
+                        value={i === 0 ? axis0Max : i === 1 ? axis1Max : i === 2 ? axis2Max : axis3Max}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (i === 0) setAxis0Max(v)
+                          else if (i === 1) setAxis1Max(v)
+                          else if (i === 2) setAxis2Max(v)
+                          else setAxis3Max(v)
+                        }}
+                      />
+                    </div>
+                    <label className="axis-notzero-label">
+                      <input
+                        type="checkbox"
+                        checked={notZero}
+                        onChange={(e) => setNotZero(e.target.checked)}
+                      />
+                      该维 ≠ 0
+                    </label>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

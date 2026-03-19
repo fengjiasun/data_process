@@ -139,6 +139,30 @@
   min-width: 0;
 }
 
+.axis-notzero-label {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500 !important;
+  font-size: 0.85rem !important;
+  color: #666 !important;
+  cursor: pointer;
+}
+
+.axis-notzero-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #667eea;
+  cursor: pointer;
+}
+
+.filter-hint {
+  font-size: 0.78rem;
+  color: #999;
+  line-height: 1.3;
+}
+
 .action-stats-top {
   margin-bottom: 24px;
 }
